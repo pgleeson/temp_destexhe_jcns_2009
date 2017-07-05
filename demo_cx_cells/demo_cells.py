@@ -7,6 +7,8 @@ License: Modified BSD (see LICENSE.txt)
 
 import sys
 from math import sqrt, pi
+import numpy as np
+
 SIMULATOR = sys.argv[-1]
 exec("import pyNN.%s as pyNN" % SIMULATOR)
     
@@ -100,9 +102,9 @@ def netCreate ():
     FS_parameters = RS_parameters.copy()
     FS_parameters.update({'a': 1000.0*a_FS, 'b': b_FS})
 
-    neurons_RS = pyNN.Population(N_GEN, pyNN.EIF_cond_exp_isfa_ista, RS_parameters)
-    neurons_LTS = pyNN.Population(N_GEN, pyNN.EIF_cond_exp_isfa_ista, LTS_parameters)
-    neurons_FS = pyNN.Population(N_GEN, pyNN.EIF_cond_exp_isfa_ista, FS_parameters)
+    neurons_RS = pyNN.Population(N_GEN, pyNN.EIF_cond_exp_isfa_ista, RS_parameters, label="RS")
+    neurons_LTS = pyNN.Population(N_GEN, pyNN.EIF_cond_exp_isfa_ista, LTS_parameters, label="LTS")
+    neurons_FS = pyNN.Population(N_GEN, pyNN.EIF_cond_exp_isfa_ista, FS_parameters, label="FS")
 
 
 
@@ -141,15 +143,24 @@ netCreate()
 def run_sim():
 
         # record the Vm
-        neurons_RS.record_v()
-        neurons_LTS.record_v()
-        neurons_FS.record_v()
+        neurons_RS.record('v')
+        neurons_LTS.record('v')
+        neurons_FS.record('v')
+        print "----[ RUNNING SIMULATION ]----"
         pyNN.run(TSTOP)
-        #neurons_RS.print_v("Vm_RS_%s.dat" % MODEL_ID, compatible_output=True)
-        #neurons_LTS.print_v("Vm_lTS_%s.dat" % MODEL_ID, compatible_output=True)
-        #neurons_FS.print_v("Vm_FS_%s.dat" % MODEL_ID, compatible_output=True)
+        
         pyNN.end()
-
+        
+        for pop in [neurons_RS,neurons_LTS,neurons_FS]:
+            data =  pop.get_data('v', gather=False)
+            filename = "%s_v.dat"%(pop.label)
+            print("Writing data for %s"%pop)
+            for segment in data.segments:
+                vm = segment.analogsignals[0].transpose()[0]
+                tt = np.array([t*DT/1000. for t in range(len(vm))])
+                times_vm = np.array([tt, vm/1000.]).transpose()
+                np.savetxt(filename, times_vm , delimiter = '\t', fmt='%s')
+        '''
         if SIMULATOR in ['neuron', 'nest', 'brian']:
             import matplotlib.pyplot as plt
 
@@ -184,7 +195,9 @@ def run_sim():
                 plt.plot(times[i],voltslts[i], '-')
                 plt.plot(times[i],voltsfs[i], '-')
 
-            plt.show()
+            plt.show()'''
+            
+        print "----[ FINISHED ]----"
 
 run_sim()
 
