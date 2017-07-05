@@ -24,7 +24,7 @@ SEED_GEN = 983651
 
 DT = 0.1                                        # (ms) Time step
 TSTART  = 0                                     
-TSTOP   = 500
+TSTOP   = 1200
 V_INIT  = -60.0
 
 # Cell parameters
@@ -40,6 +40,12 @@ V_REST          = -60                           # resting potential
 a_RS            = 0.001 
 b_RS            = 0.1   # full adaptation
 b_RS            = 0.005 # weaker adaptation
+
+
+b_RSa            = 0.04 # Figure 1a
+b_RSb            = 0.005 # Figure 1b
+
+
 a_LTS           = 0.02
 b_LTS           = 0.0
 a_FS            = 0.001
@@ -84,10 +90,11 @@ USE_CVODE = False # }
 
 # we now use a standard cell model from PyNN, so there is nothing to do here
 
+all_populations = []
 
 
-def netCreate ():
-    global nLTS, neurons_RS, neurons_LTS, neurons_FS
+def netCreate():
+    global nLTS, neurons_RS, neurons_LTS, neurons_FS, all_populations
     RS_parameters = {
         'cm': 1000*AREA*CAPACITANCE, 'tau_m': TAU, 'v_rest': V_REST,
         'v_thresh': VTR, 'tau_refrac': REFRACTORY+DT,
@@ -95,18 +102,38 @@ def netCreate ():
         'tau_w': TAU_W, 'delta_T': DELTA, 'tau_syn_E': TAU_E, 'e_rev_E': V_E,
         'tau_syn_I': TAU_I, 'e_rev_I': V_I
     }
-    RS_parameters['i_offset'] = 0.1
+    #RS_parameters['i_offset'] = 0.1
+    
+    RSa_parameters = RS_parameters.copy()
+    RSa_parameters.update({'b': b_RSa}) 
+    
+    RSb_parameters = RS_parameters.copy()
+    RSb_parameters.update({'b': b_RSb}) 
+    
     
     LTS_parameters = RS_parameters.copy()
     LTS_parameters.update({'a': 1000.0*a_LTS, 'b': b_LTS}) # 1000 is for uS --> nS
     FS_parameters = RS_parameters.copy()
     FS_parameters.update({'a': 1000.0*a_FS, 'b': b_FS})
 
-    neurons_RS = pyNN.Population(N_GEN, pyNN.EIF_cond_exp_isfa_ista, RS_parameters, label="RS")
+    neurons_RSa = pyNN.Population(N_GEN, pyNN.EIF_cond_exp_isfa_ista, RSa_parameters, label="RSa")
+    neurons_RSb = pyNN.Population(N_GEN, pyNN.EIF_cond_exp_isfa_ista, RSb_parameters, label="RSb")
+    
     neurons_LTS = pyNN.Population(N_GEN, pyNN.EIF_cond_exp_isfa_ista, LTS_parameters, label="LTS")
     neurons_FS = pyNN.Population(N_GEN, pyNN.EIF_cond_exp_isfa_ista, FS_parameters, label="FS")
+    
+    all_populations = [neurons_RSa,neurons_RSb,neurons_LTS,neurons_FS]
 
 
+    ################################################################
+    #IClamp
+    step_current = pyNN.DCSource(amplitude= 0.25, start=200.0, stop=700.0)
+    
+    for pop in all_populations:
+        step_current.inject_into(pop)
+        pyNN.initialize(pop, v=VBOT)
+        
+    ################################################################
 
 
 #-----------------------------------------------------------------
@@ -143,15 +170,16 @@ netCreate()
 def run_sim():
 
         # record the Vm
-        neurons_RS.record('v')
-        neurons_LTS.record('v')
-        neurons_FS.record('v')
+        
+        for pop in all_populations:
+            pop.record('v')
+        
         print "----[ RUNNING SIMULATION ]----"
         pyNN.run(TSTOP)
         
         pyNN.end()
         
-        for pop in [neurons_RS,neurons_LTS,neurons_FS]:
+        for pop in all_populations:
             data =  pop.get_data('v', gather=False)
             filename = "%s_v.dat"%(pop.label)
             print("Writing data for %s"%pop)
